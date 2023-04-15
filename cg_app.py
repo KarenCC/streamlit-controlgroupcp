@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
-# import openpyxl
+import openpyxl # se importa porque sin esto genera error en streamlit cloud
 
 # RUN WITH: streamlit run CG_app.py
 # Se realiza la selección del grupo de control para Clientes Perfectos.
