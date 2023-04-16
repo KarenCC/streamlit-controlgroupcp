@@ -4,21 +4,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
-import openpyxl # se importa porque sin esto genera error en streamlit cloud
+import openpyxl  # se importa porque sin esto genera error en streamlit cloud
 
 # RUN WITH: streamlit run CG_app.py
 # Se realiza la selección del grupo de control para Clientes Perfectos.
-
-# st.markdown(
-#     """"""
-#     <style>
-#     .main {
-#     background-color: #F5F5F5;
-#     }
-#     <syle>
-#     """""",
-#     unsafe_allow_html=True
-# )
 
 
 @st.cache_data
@@ -45,7 +34,7 @@ st.write('Para realizar los cálculos correctamente, este es el nombre que debe 
 dict_format = {'Año': {'Nombre': 'Año', 'Tipo': 'int'},
                'Mes': {'Nombre': 'Mes', 'Tipo': 'string'},
                'Código del cliente': {'Nombre': 'CodClien final', 'Tipo': 'int'},
-               #'Descripción del cliente': {'Nombre': 'DescriClien final', 'Tipo': 'string'},
+               # 'Descripción del cliente': {'Nombre': 'DescriClien final', 'Tipo': 'string'},
                'Cliente Perfecto': {'Nombre': 'CP', 'Tipo': 'string'},
                'Canal': {'Nombre': 'Canal', 'Tipo': 'string'},
                'Tipo de Cliente': {'Nombre': 'Tipo Cliente', 'Tipo': 'string'},
@@ -131,12 +120,12 @@ st.write('Filtro 3: Selección de mínimo número de meses')
 option_min_months = st.slider('Selecciona el número de meses: ', min_value=1, max_value=12, value=8)
 df_mes = df.pivot_table(
     index=['CodClien final', 'CP', 'Fecha'],
-    aggfunc={'VN':'sum', 'Familia':'nunique',}
+    aggfunc={'VN': 'sum', 'Familia': 'nunique'}
 ).reset_index()
 df_mes.rename(columns={'VN': 'Monto', 'Familia': 'Mix_familias'}, inplace=True)
 df_conteo_meses = df_mes.pivot_table(
     index=['CodClien final', 'CP'],
-    aggfunc={"Fecha":['nunique']}
+    aggfunc={"Fecha": ['nunique']}
 )
 df_conteo_meses.columns = ["cant_meses"]
 df_conteo_meses.reset_index(inplace=True)
@@ -187,7 +176,7 @@ st.write('Filtro 6: Exclusión de deciles inferiores')
 # option_min_dec = st.selectbox('Selecciona el mínimo decil (mientras más alto mayor TP y más cercano a CP):',
 # [3,4,5,6,7,8,9,10])
 df_cliente["deciles"] = pd.qcut(df_cliente["ticket_prom_mes"], q=10, labels=np.arange(1, 11)).astype('int')
-df_cliente = df_cliente[(df_cliente['CP']=='CP') | ((df_cliente['CP']=='NO CP') & (df_cliente['deciles'] >= 8))]
+df_cliente = df_cliente[(df_cliente['CP'] == 'CP') | ((df_cliente['CP'] == 'NO CP') & (df_cliente['deciles'] >= 8))]
 st.write('Esta es la cantidad de clientes por grupo que pasan los filtros (NO CP debe ser mayor a CP):')
 st.write(df_cliente.groupby('CP')['CodClien final'].nunique())
 
@@ -286,7 +275,7 @@ else:
     df_piloto_elegido['groups'] = df_piloto_elegido.groups.astype('category')
 
     fig, ax = plt.subplots()
-    sns.lineplot(x="Fecha", y="Monto", data = df_piloto_elegido, hue="groups", palette=sns.cubehelix_palette(2))
+    sns.lineplot(x="Fecha", y="Monto", data=df_piloto_elegido, hue="groups", palette=sns.cubehelix_palette(2))
     plt.title("Mean std: " + str(round(con_nueva_meto.mean_std[0], 2)))
     st.pyplot(fig)
 
@@ -302,20 +291,20 @@ else:
 
     # Se revisa distribución de ticket por canal
     df3 = df2.sort_values(by=['CodClien final', 'Fecha']).pivot_table(
-        index = ['CodClien final'],
-        aggfunc = {"Canal": "last",
-                   "Tipo Cliente": "last",
-                   "Ton": "sum",
-                   "VN": ["sum", "mean"]}
+        index=['CodClien final'],
+        aggfunc={"Canal": "last",
+                 "Tipo Cliente": "last",
+                 "Ton": "sum",
+                 "VN": ["sum", "mean"]}
     ).reset_index()
     df3.columns = ["CodClien final", "Canal", "Tipo Cliente", "Ton_Sum", "Venta_Prom", "Venta_Sum"]
 
     df_final_tabla = df_final.merge(df3, how='inner', on='CodClien final')
 
     st.subheader('Número de clientes y ticket por canal:')
-    tabla_canal = df_final_tabla[df_final_tabla['groups']=='NO_CP'].pivot_table(
+    tabla_canal = df_final_tabla[df_final_tabla['groups'] == 'NO_CP'].pivot_table(
         index=["Canal"],
-        aggfunc={"ticket_prom_mes":["min", "max", "mean"], "CodClien final": "nunique"}
+        aggfunc={"ticket_prom_mes": ["min", "max", "mean"], "CodClien final": "nunique"}
     ).reset_index()
     tabla_canal.columns = ["Canal", "n_clientes", "ticket_prom_max", "ticket_prom_prom", "ticket_prom_min"]
     st.write(tabla_canal)
@@ -323,13 +312,22 @@ else:
     st.subheader('Número de clientes y ticket por tipo de cliente:')
     tabla_tipo_cliente = df_final_tabla[df_final_tabla['groups'] == 'NO_CP'].pivot_table(
         index=["Tipo Cliente"],
-        aggfunc={"ticket_prom_mes":["min", "max", "mean"], "CodClien final": "nunique"}
+        aggfunc={"ticket_prom_mes": ["min", "max", "mean"], "CodClien final": "nunique"}
     ).reset_index()
-    tabla_tipo_cliente.columns = ["Tipo Cliente", "n_clientes", "ticket_prom_max", "ticket_prom_prom", "ticket_prom_min"]
+    tabla_tipo_cliente.columns = ["Tipo Cliente", "n_clientes", "ticket_prom_max", "ticket_prom_prom",
+                                  "ticket_prom_min"]
     st.write(tabla_tipo_cliente)
 
-    # Preguntar si se exporta el archivo con grupo seleccionado
-    export_choice = st.selectbox('Desea exportar este grupo de control? ', ['Sí', 'No'], index=1)
-    if export_choice == 'Sí':
-        df_final[df_final['groups'] == 'NO_CP'].to_excel("groups_output_bolivia.xlsx", index=False)
-        st.write('Se exportó la base correctamente')
+    @st.cache_data
+    def convert_df(data):
+        # IMPORTANT: Cache the conversion to prevent computation on every rerun
+        return data.to_csv(index=False).encode('utf-8')
+
+    csv = convert_df(df_final[df_final['groups'] == 'NO_CP'])
+
+    st.download_button(
+        label="Descargar grupo de control",
+        data=csv,
+        file_name='groups_output_bolivia.csv',
+        mime='text/csv',
+    )
