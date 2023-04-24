@@ -20,22 +20,23 @@ def get_data(filename):
 
 
 # Funcion que selecciona el grupo de control
-def asignacion_grupos(df, seed, n_sample, use_dict, dict_canal):
+def asignacion_grupos(df, seed, n_sample, dict_cliente, name_col):
+
     # Se consideran todos clientes CP
     grupo1 = df.loc[df['CP'] == 'CP', ['CodClien final']]
     grupo1["groups"] = 'CP'
 
     # Se valida si utilizar diccionario para asignar num de clientes por canal
-    if use_dict:
+    if dict_cliente is not None:
         grupo2 = pd.DataFrame({})
-        for key in dict_canal:
-            grupoc = (
-                df.loc[(df['CP'] == 'NO CP') & (df['Canal'] == key), ['CodClien final']]
-                .apply(lambda s: s.sample(n=dict_canal[key], random_state=seed))
+        for key in dict_cliente:
+            grupok = (
+                df.loc[(df['CP'] == 'NO CP') & (df[name_col] == key), ['CodClien final']]
+                .apply(lambda s: s.sample(n=dict_cliente[key], random_state=seed))
                 .reset_index()
             ).drop("index", axis=1)
-            grupoc["groups"] = 'NO_CP'
-            grupo2 = pd.concat([grupo2, grupoc])
+            grupok["groups"] = 'NO_CP'
+            grupo2 = pd.concat([grupo2, grupok])
     else:
         grupo2 = (
             df.loc[df['CP'] == 'NO CP', ['CodClien final']]
@@ -49,11 +50,11 @@ def asignacion_grupos(df, seed, n_sample, use_dict, dict_canal):
     return grupo_concatenado
 
 
-def create_groups(df, df_mes, seed, n_sample, show=False, use_dict=False, dict_canal=None):
-    total_group = asignacion_grupos(df=df, seed=seed, n_sample=n_sample, use_dict=use_dict, dict_canal=dict_canal)
+def create_groups(df, df_mes, seed, n_sample, show=False, dict_cliente=None, name_col=None):
+
+    total_group = asignacion_grupos(df=df, seed=seed, n_sample=n_sample, dict_cliente=dict_cliente, name_col=name_col)
 
     df_piloto = df_mes.merge(
-        # right = total_group[['deciles', 'CodClien final', 'groups']],
         right=total_group[['CodClien final', 'groups']],
         on=["CodClien final"],
         how="inner"
@@ -236,16 +237,34 @@ if uploaded_file is not None:
 
     # Selección de deciles
     st.write('Filtro 6: Exclusión de deciles inferiores')
-    # option_min_dec = st.selectbox('Selecciona el mínimo decil (mientras más alto mayor TP y más cercano a CP):',
-    # [3,4,5,6,7,8,9,10])
+    # option_min_dec = st.selectbox('Selecciona el mínimo decil (mientras más alto mayor TP y más parecido a CP):',
+    # [1,2,3,4,5,6,7,8,9,10])
     df_cliente["deciles"] = pd.qcut(df_cliente["ticket_prom_mes"], q=10, labels=np.arange(1, 11)).astype('int')
     df_cliente = df_cliente[(df_cliente['CP'] == 'CP') | ((df_cliente['CP'] == 'NO CP') & (df_cliente['deciles'] >= 8))]
     st.write('Esta es la cantidad de clientes por grupo que pasan los filtros (NO CP debe ser mayor a CP):')
     st.write(df_cliente.groupby('CP')['CodClien final'].nunique())
 
+    # Revisar si es posible seleccionar min aleatorios por canal y tipo
+    # Se revisa distribución de ticket por canal
+    df3 = df2.sort_values(by=['CodClien final', 'Fecha']).pivot_table(
+        index=['CodClien final'],
+        aggfunc={"Canal": "last",
+                 "Tipo Cliente": "last",
+                 "Ton": "sum",
+                 "VN": ["sum", "mean"]}
+    ).reset_index()
+    df3.columns = ["CodClien final", "Canal", "Tipo Cliente", "Ton_Sum", "Venta_Prom", "Venta_Sum"]
+
+    df_cliente = df_cliente.merge(df3[["CodClien final", "Canal", "Tipo Cliente"]], how='left', on='CodClien final')
+
+    option_var = st.selectbox('Selecciona la variable cuyo num. de clientes deseas ver:',
+                              ['Canal', 'Tipo Cliente'])
+    st.table(df_cliente.loc[df_cliente['CP'] == 'NO CP', [option_var]].value_counts())
+
+    # Revisar si añadir diccionario según columna elegida
+    # Ej.: dict_cliente = {'Mayoristas': 115, 'Minoristas': 207, 'Tiendas': 7}
 
     st.header("Grupo de control seleccionado")
-
 
     if df_cliente.loc[df_cliente['CP'] == 'NO CP', 'CodClien final'].nunique() \
             < df_cliente.loc[df_cliente['CP'] == 'CP', 'CodClien final'].nunique():
@@ -261,7 +280,8 @@ if uploaded_file is not None:
         seeds = []
         lst = []
         for seed_id in tqdm(range(1001)):
-            _, mean_std = create_groups(df_cliente, df_mes, seed_id, n_sample)
+            _, mean_std = create_groups(df_cliente, df_mes, seed_id, n_sample,
+                                        show=False, dict_cliente=None, name_col=None)
             seeds.append(seed_id)
             lst.append(mean_std)
         lista_std["seed"] = seeds
@@ -269,10 +289,11 @@ if uploaded_file is not None:
 
         temp_std = pd.DataFrame(lista_std)
         con_nueva_meto = temp_std.sort_values("mean_std").reset_index(drop=True)
-        st.write('Este es la desviacion del top mejores grupos encontrados:', con_nueva_meto.head())
+        st.write('Este es la desviación del top mejores grupos encontrados:', con_nueva_meto.head())
 
         BEST_SEED = con_nueva_meto.seed[0]
-        df_piloto_elegido, _ = create_groups(df_cliente, df_mes, BEST_SEED, n_sample=n_sample)
+        df_piloto_elegido, _ = create_groups(df_cliente, df_mes, BEST_SEED, n_sample=n_sample,
+                                             show=False, dict_cliente=None, name_col=None)
 
         # Se prepara el dataset final
         df_piloto_elegido['groups'] = df_piloto_elegido.groups.astype('category')
@@ -291,16 +312,6 @@ if uploaded_file is not None:
         )
         df_final.columns = ["ticket_prom_mes"]
         df_final.reset_index(inplace=True)
-
-        # Se revisa distribución de ticket por canal
-        df3 = df2.sort_values(by=['CodClien final', 'Fecha']).pivot_table(
-            index=['CodClien final'],
-            aggfunc={"Canal": "last",
-                     "Tipo Cliente": "last",
-                     "Ton": "sum",
-                     "VN": ["sum", "mean"]}
-        ).reset_index()
-        df3.columns = ["CodClien final", "Canal", "Tipo Cliente", "Ton_Sum", "Venta_Prom", "Venta_Sum"]
 
         df_final_tabla = df_final.merge(df3, how='inner', on='CodClien final')
 
